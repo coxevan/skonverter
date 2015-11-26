@@ -34,6 +34,12 @@ def determine_weighting( transform, root_bone = None, tolerance = -1 ):
 	"""
 	if not transform or not root_bone:
 		return False, 'One or both objects were not found. Transform : {0} | Root_bone : {1}'.format( transform, root_bone )
+	
+	# If it's not a pymel node, we'll make it one for the early stages of data collection about objects, not verts. 
+	if not isinstance( transform, pymel.core.nodetypes.DagNode ):
+		transform = pymel.core.PyNode( transform )
+	if not isinstance( root_bone, pymel.core.nodetypes.DagNode ):
+		root_bone = pymel.core.PyNode( root_bone )
 		
 	rest_vert_positions = query_vertex_positions( transform )
 	ordered_bone_list = get_ordered_bone_list( root_bone, [ root_bone ] )
@@ -126,7 +132,10 @@ def apply_weighting( transform, skincluster = None, data = None ):
 	"""
 	Main method which holds logic for applying weighting data
 	"""
-	
+	# If it's not a pymel node, we'll make it one for the early stages of data collection about objects, not verts. 
+	if not isinstance( transform, pymel.core.nodetypes.DagNode ):
+		transform = pymel.core.PyNode( transform )
+		
 	if not skincluster:
 		print 'Skin Weight Application : Getting the skin cluster'
 		# Get the objects history and then grab the skincluster from it
