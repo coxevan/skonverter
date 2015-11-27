@@ -37,9 +37,10 @@ def run_skin_calculation( transform, root_bone, tolerance = -1, file_path = '' )
 	"""
 	data, message = methods.determine_weighting( transform, root_bone, tolerance = tolerance )
 	
-	if file_path:
+	# Data is valid, so if a file path was provided too, save the data out. 
+	if file_path and data:
 		methods.save_json( file_path, data )
-	
+
 	return data, message
 
 
