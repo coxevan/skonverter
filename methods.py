@@ -35,11 +35,14 @@ def determine_weighting( transform, root_bone = None, tolerance = -1 ):
 	if not transform or not root_bone:
 		return False, 'One or both objects were not found. Transform : {0} | Root_bone : {1}'.format( transform, root_bone )
 	
-	# If it's not a pymel node, we'll make it one for the early stages of data collection about objects, not verts. 
-	if not isinstance( transform, pymel.core.nodetypes.DagNode ):
-		transform = pymel.core.PyNode( transform )
-	if not isinstance( root_bone, pymel.core.nodetypes.DagNode ):
-		root_bone = pymel.core.PyNode( root_bone )
+	try:
+		# If it's not a pymel node, we'll make it one for the early stages of data collection about objects, not verts. 
+		if not isinstance( transform, pymel.core.nodetypes.DagNode ):
+			transform = pymel.core.PyNode( transform )
+		if not isinstance( root_bone, pymel.core.nodetypes.DagNode ):
+			root_bone = pymel.core.PyNode( root_bone )
+	except pymel.core.MayaNodeError as exception:
+		return False, '{0}'.format( exception )
 		
 	rest_vert_positions = query_vertex_positions( transform )
 	ordered_bone_list = get_ordered_bone_list( root_bone, [ root_bone ] )
@@ -133,9 +136,12 @@ def apply_weighting( transform, skincluster = None, data = None ):
 	Main method which holds logic for applying weighting data
 	"""
 	# If it's not a pymel node, we'll make it one for the early stages of data collection about objects, not verts. 
-	if not isinstance( transform, pymel.core.nodetypes.DagNode ):
-		transform = pymel.core.PyNode( transform )
-		
+	try:
+		if not isinstance( transform, pymel.core.nodetypes.DagNode ):
+			transform = pymel.core.PyNode( transform )
+	except pymel.core.MayaNodeError as exception :
+		return False, '{0}'.format( exception )
+	
 	if not skincluster:
 		print 'Skin Weight Application : Getting the skin cluster'
 		# Get the objects history and then grab the skincluster from it
@@ -154,12 +160,15 @@ def apply_weighting( transform, skincluster = None, data = None ):
 	
 	bone_failure = [ ]    # List to catch our failures :(
 	print 'Skin Weight Application : Applying vertex weighting'
+	
+	# Logging variable declaration/initialization
+	notify_total_weights = False
+	vertices_evaluated = [ ] 	
 	total_weights = [ ]	
 	
 	# Remove any normalizing that maya will try to do and remove all the weighting on the current skincluster.
 	py_cluster.setNormalizeWeights( 0 )
 	remove_all_weighting( skincluster, transform, ordered_bone_list, weight_data.keys( ) )	
-	notify_total_weights = False
 	
 	# For each vert, we'll get the list of ( bone_name, weight ) and apply it to the vertex
 	for vert_id in weight_data.keys( ):
@@ -177,6 +186,7 @@ def apply_weighting( transform, skincluster = None, data = None ):
 		# We apply the weighting to the skin cluster
 		try:
 			maya.cmds.skinPercent( skincluster, transform + '.vtx[{0}]'.format( vert_id ), tv = weight_data[ vert_id ] )
+			vertices_evaluated.append( vert_id )
 			
 		# If we failed, we catch it and save it to the failure list to notify the user later
 		except RuntimeError as excep:
@@ -426,15 +436,59 @@ def verify_data( data ):
 	"""
 	print 'Skonverter | Verifying data'
 	
-	if isinstance( data, dict ):
+	if not isinstance( data, dict ):
 		return False, 'Data must be a dictionary'
 	
-	if not 'order' in data.keys( ) or 'weight' in data.keys( ):
+	if not 'order' in data.keys( ) or not 'weight' in data.keys( ):
 		return False, 'Data either does not contain key "order" or key "weight"'
 	
 	# Check the order
-	for bone_string in order:
-		if not isinstance( bone_string, str ):
+	for bone_string in data['order']:
+		if not isinstance( bone_string, basestring ):
 			return False, 'Bone list must be strings'
 	
 	return True, 'Data is valid'
+
+def determine_data_to_source( data, file_path ):
+	"""
+	Handles the loading and verification of data. Determines whether or not to get the data from the disk or to use the data passed in.
+	"""
+	# Check to see if the file path and/or data is even valid.
+	file_path_validity = os.path.exists( file_path )
+	data_validity, message = verify_data( data )
+	
+	# If not neither
+	if not file_path_validity and not data_validity:
+		return False, 'No valid data or file passed in'
+	
+	# If not file
+	if not file_path_validity:
+		# The path is not valid. Verify the data and return
+		return data_validity, data
+	
+	# If not data
+	if not data_validity:
+		# We load the data from the file
+		result, data = load_data_from_file( file_path )
+	
+	# If the file path is valid and the data is valid, check the const to determine preference.
+	if data_validity and file_path_validity:
+		if const.FILE_PREFERENCE:
+			# We go with the file
+			return load_data_from_file( file_path )
+
+		else:
+			# We go with the data we were passed in.
+			return data_validity, data
+		
+
+def load_data_from_file( file_path ):
+	# Load the data
+	file_data = load_json( file_path )
+	
+	# Verify it
+	result, message = verify_data( file_data )
+	if result:
+		return result, file_data
+	else:
+		return False, message	

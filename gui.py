@@ -150,15 +150,15 @@ class Skonverter_Interface( ):
 	def on_transform_field_change( self, *args ):
 		try:
 			self.transform = pymel.core.PyNode( self.transform_field.getText( ) )
-		except Exception as excep:
-			print excep
+		except pymel.core.MayaNodeError as excep:
+			self.warning( excep )
 		return True
 			
 	def on_root_field_change( self, *args ):
 		try:
 			self.root_bone = pymel.core.PyNode( self.root_field.getText( ) )
-		except Exception as excep:
-			print excep	
+		except pymel.core.MayaNodeError as excep:
+			self.warning( excep )	
 		return True
 			
 	def on_tolerance_field_change( self, *args ):
