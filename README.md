@@ -2,6 +2,8 @@
 Simple skin converter written for Autodesk Maya. Mostly written for my own learning/experimentation and 
 getting back into Maya after working primarily in MotionBuilder for a year or so.
 
+[Read more on my Dev Blog here!]( http://evancox.net/skonverter-what/ ) If you're interested in contributing, please feel free to let me know or just start tinkering on your own and lets merge! :)
+
 ## The meat - Get it running
 * Download/move/install the Skonverter package into your Maya python path.
 * Call the following lines of code for a quick example, or check out the example file provided in the package.
