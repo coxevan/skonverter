@@ -7,6 +7,7 @@ Author : Evan Cox, coxevan90@gmail.com
 # Maya sdk imports
 import maya.cmds
 import pymel.core
+import maya.api.OpenMaya as om2
 
 # Python std lib imports
 import pprint
@@ -52,6 +53,8 @@ def determine_weighting( transform, root_bone = None, tolerance = -1 ):
 	#bone_and_locators = create_locators( ordered_bone_list )
 	#create_expression( bone_and_locators )
 	
+	weight_data = { } # Final data to be sent out, Dictionary to associate verts with bones and weights for application to the skin cluster.
+
 	for index, bone in enumerate( ordered_bone_list ):
 		bone_name = bone.name( )
 		
@@ -90,16 +93,9 @@ def determine_weighting( transform, root_bone = None, tolerance = -1 ):
 		if child_bones:
 			for _child, vector in child_bones:
 				maya.cmds.xform( _child, translation = vector, a = True, ws = True )
-			
-	print 'Skin Weight calculation complete | Organizing data into skinPercent readable format'
-	bone_name_list = [ bone.name( ) for bone in ordered_bone_list ] # Make this list so we don't have to keep pymel objs around for the weight application. We only need the names
-	
-	weight_data = { } # Final data to be sent out, Dictionary to associate verts with bones and weights for application to the skin cluster.
-		
-	# For each bone in the bone list, we regather the info into a dictionary of bones and weights associated with each vert.
-	for bone_name in bone_name_list:
+
 		# Get the vert id and it's associated weight for this bone
-		for vert_id, weight in enumerate( bone_vert_association[ bone_name ] ):
+		for vert_id, weight in bone_vert_association[ bone_name ].iteritems():
 			# If the weight is below the tolerance, we skip it
 			if weight <= tolerance:
 				continue
@@ -107,7 +103,10 @@ def determine_weighting( transform, root_bone = None, tolerance = -1 ):
 			vert_id_string = str( vert_id )
 			if vert_id_string not in weight_data.keys( ):
 				weight_data[ vert_id_string ] = [ ]
-			weight_data[ vert_id_string ].append( ( bone_name, weight ) )	
+			weight_data[ vert_id_string ].append( ( bone_name, weight ) )
+			
+	print 'Skin Weight calculation complete | Organizing data into skinPercent readable format'
+	bone_name_list = [ bone.name( ) for bone in ordered_bone_list ] # Make this list so we don't have to keep pymel objs around for the weight application. We only need the names
 			
 	if NORMALIZE:
 		messages = [ ]
@@ -240,30 +239,22 @@ def get_ordered_bone_list( bone, bone_list = None ):
 
 def query_vertex_positions( transform ):
 	"""
-	Queries all vertex positions from a given transforms shape node.
+	Queries all vertex positions from a given transform
 
-	TODO: Account for multiple shape nodes.
+	Using Maya Python API 2.0
 	"""
-	# We need a shape node here, so we 
-	if isinstance( transform, pymel.core.nodetypes.Transform ):
-		# Get the shape node from the transform
-		shape_node = transform.getShape( )
-	elif isinstance( transform, pymel.core.nodetypes.Shape ):
-		shape_node = transform
-	else:
-		# We need the transform arg to be either a transform or a shape node. If the checks above failed
-		maya.cmds.warning('Error finding shape node')
-		return None
-	
-	vert_positions = []    # will contain positions
-	vert_list = maya.cmds.getAttr( shape_node+".vrts", multiIndices=True ) # Get the list of verts from the shape nodes vrts attribute
- 
-	for i in vert_list :
-		# Get the current vert position
-		current_vert_position = maya.cmds.xform( "{0}.pnts[{1}]".format( shape_node, i ), query=True, translation=True, worldSpace=True )    # [1.1269192869360154, 4.5408735275268555, 1.3387055339628269]
-		vert_positions.append( current_vert_position )
- 
-	return vert_positions
+
+	# Create a selectionList and add our transform to it
+	sel_list = om2.MSelectionList()
+	sel_list.add( transform.name() )
+
+	# Get the dag path of the first item in the selection list
+	sel_obj = sel_list.getDagPath( 0 )
+
+	# create a Mesh functionset from our dag object
+	mfn_object = om2.MFnMesh( sel_obj )
+
+	return mfn_object.getPoints()
 
 
 def calculate_vertex_distance( vector1, vector2 ):
@@ -308,20 +299,21 @@ def calculate_vertex_weights( new_positions, rest_positions ):
 	process goes from the root bone to the tips, meaning that weight is applied to the root bone at first, and then slowly chipped away by other bones, similar 
 	to the way some people choose to paint their weights in a normal situation.
 	"""
-	# We make a list to store weights in
-	list_of_weights = [ ]
+	# We make a dictionary to store weights in
+	list_of_weights = {}
+
+	# Get list of indexes to get distance on
+	index_list = [(i) for i, j in enumerate(zip(new_positions, rest_positions)) if j[0] != j[1]]
 	
-	# Iterate through the new position and the rest position
-	for new_pos, rest_pos in zip( new_positions, rest_positions ):
-		
+	for index in index_list:
 		# Calculate the vertex distance and divide by the bone's movement (Default is 1 unit)
-		weight = calculate_vertex_distance( new_pos, rest_pos ) / BONE_DELTA
+		weight = calculate_vertex_distance( new_positions[index], rest_positions[index] ) / BONE_DELTA
 		
 		# Round the weighting.
 		weight = round_float( weight )
 				
 		# TODO: Probably need more checks here to ensure that the weighting is valid
-		list_of_weights.append( weight )
+		list_of_weights[index] = weight 
 		
 	return list_of_weights
 
